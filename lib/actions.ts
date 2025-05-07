@@ -6,8 +6,26 @@ import { extractTablesFromImage, extractTablesFromPDF } from "@/lib/ocr"
 // In-memory storage for extracted tables (in a real app, use a database)
 let extractedTables = []
 let debugInfo = null
+let isExtracting = false
+let lastUploadTimestamp = 0
+
+// Add a function to clear the extracted tables
+export async function clearExtractedTables() {
+  // Completely reset all data
+  extractedTables = []
+  debugInfo = null
+  isExtracting = true
+  lastUploadTimestamp = Date.now()
+
+  // Force revalidation of all paths
+  revalidatePath("/")
+  return { success: true }
+}
 
 export async function uploadFile(formData) {
+  const currentUploadTimestamp = Date.now()
+  lastUploadTimestamp = currentUploadTimestamp
+
   try {
     const file = formData.get("file")
 
@@ -15,9 +33,15 @@ export async function uploadFile(formData) {
       throw new Error("No file provided")
     }
 
+    // Set extraction flag to true
+    isExtracting = true
+
     // Clear previous data when a new file is uploaded
     extractedTables = []
     debugInfo = null
+
+    // Revalidate path to update UI
+    revalidatePath("/")
 
     let result
 
@@ -29,6 +53,15 @@ export async function uploadFile(formData) {
         result = await extractTablesFromImage(file)
       } else {
         throw new Error("Unsupported file type")
+      }
+
+      // Check if this is still the most recent upload
+      if (lastUploadTimestamp !== currentUploadTimestamp) {
+        console.log("Ignoring results from outdated upload")
+        return {
+          success: false,
+          error: "A newer upload is in progress",
+        }
       }
 
       // Store debug info
@@ -55,31 +88,51 @@ export async function uploadFile(formData) {
     } catch (error) {
       console.error("Error in OCR processing:", error)
       throw error
+    } finally {
+      // Only update if this is still the most recent upload
+      if (lastUploadTimestamp === currentUploadTimestamp) {
+        // Set extraction flag to false
+        isExtracting = false
+        // Revalidate path to update UI with final state
+        revalidatePath("/")
+      }
     }
-
-    // Force revalidation to refresh the UI
-    revalidatePath("/")
 
     return {
       success: true,
       tables: extractedTables,
       debug: debugInfo,
+      timestamp: currentUploadTimestamp,
     }
   } catch (error) {
     console.error("Error processing file:", error)
+
+    // Only update if this is still the most recent upload
+    if (lastUploadTimestamp === currentUploadTimestamp) {
+      // Set extraction flag to false
+      isExtracting = false
+      // Revalidate path to update UI with error state
+      revalidatePath("/")
+    }
 
     // Return the error with debug info if available
     return {
       success: false,
       error: error.message || "Unknown error occurred",
       debug: debugInfo,
+      timestamp: currentUploadTimestamp,
     }
   }
 }
 
 export async function getExtractedTables() {
-  // Return the stored tables
-  return { tables: extractedTables, debug: debugInfo }
+  // Return the stored tables and extraction status
+  return {
+    tables: extractedTables,
+    debug: debugInfo,
+    isExtracting,
+    timestamp: lastUploadTimestamp,
+  }
 }
 
 export async function getDebugInfo() {
@@ -96,5 +149,33 @@ export async function saveTableData(tableId, data) {
   } catch (error) {
     console.error("Error saving table data:", error)
     throw error
+  }
+}
+
+export async function processFile(formData) {
+  try {
+    const file = formData.get("file")
+
+    if (!file) {
+      throw new Error("No file provided")
+    }
+
+    // Process based on file type
+    let result
+    if (file.type === "application/pdf") {
+      result = await extractTablesFromPDF(file)
+    } else if (file.type.startsWith("image/")) {
+      result = await extractTablesFromImage(file)
+    } else {
+      throw new Error("Unsupported file type")
+    }
+
+    return result
+  } catch (error) {
+    console.error("Error processing file:", error)
+    return {
+      success: false,
+      error: error.message || "Failed to process file",
+    }
   }
 }

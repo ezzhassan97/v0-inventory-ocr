@@ -11,6 +11,8 @@ export function FilePreview({ file, onClose }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    if (!file) return
+
     // Create object URL when component mounts
     try {
       const url = URL.createObjectURL(file)
@@ -29,8 +31,8 @@ export function FilePreview({ file, onClose }) {
     }
   }, [file])
 
-  const isPdf = file.type === "application/pdf"
-  const isImage = file.type.startsWith("image/")
+  const isPdf = file?.type === "application/pdf"
+  const isImage = file?.type?.startsWith("image/")
 
   const toggleExpand = () => {
     setExpanded(!expanded)
@@ -42,8 +44,10 @@ export function FilePreview({ file, onClose }) {
     }
   }
 
+  if (!file) return null
+
   return (
-    <Card className={`relative ${expanded ? "fixed inset-4 z-50" : "w-full"}`}>
+    <Card className={`relative mt-4 ${expanded ? "fixed inset-4 z-50" : "w-full"}`}>
       <div className="absolute top-2 right-2 flex gap-2 z-10">
         <Button variant="outline" size="icon" onClick={toggleExpand} className="h-8 w-8 bg-white/90">
           {expanded ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
