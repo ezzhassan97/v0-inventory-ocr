@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { FilePreview } from "@/components/file-preview"
-import { processFile } from "@/lib/actions"
 
 export function FileUpload({ onProcessingStart, onProcessingComplete, onError }) {
   const [file, setFile] = useState(null)
@@ -69,29 +68,23 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
         })
       }, 500)
 
-      // Process the file
+      // Process the file using our new upload API
       const formData = new FormData()
       formData.append("file", file)
 
       try {
-        // Try server action first
-        let result = await processFile(formData)
+        console.log("Uploading file to Supabase and processing with Gemini")
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
 
-        // If server action fails, try API route
-        if (!result || result.error) {
-          console.log("Server action failed, trying API route")
-          const response = await fetch("/api/ocr", {
-            method: "POST",
-            body: formData,
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
-            throw new Error(errorData.error || `Server error: ${response.status}`)
-          }
-
-          result = await response.json()
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
+          throw new Error(errorData.error || `Server error: ${response.status}`)
         }
+
+        const result = await response.json()
 
         // Complete progress animation
         clearInterval(progressInterval)
