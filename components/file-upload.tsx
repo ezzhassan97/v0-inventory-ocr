@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Upload, FileText, ImageIcon, Loader2, AlertCircle, Eye } from "lucide-react"
+import { Upload, FileText, ImageIcon, Loader2, AlertCircle, Eye, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -14,11 +14,13 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
+  const [isConnectivityError, setIsConnectivityError] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0]
     setError(null)
+    setIsConnectivityError(false)
 
     if (!selectedFile) return
 
@@ -51,6 +53,7 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       setIsProcessing(true)
       setProgress(0)
       setError(null)
+      setIsConnectivityError(false)
 
       // Notify parent component
       onProcessingStart()
@@ -70,29 +73,58 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       const formData = new FormData()
       formData.append("file", file)
 
-      const result = await processFile(formData)
+      try {
+        const result = await processFile(formData)
 
-      // Complete progress animation
-      clearInterval(progressInterval)
-      setProgress(100)
+        // Complete progress animation
+        clearInterval(progressInterval)
+        setProgress(100)
 
-      // Handle result
-      if (result.success) {
-        onProcessingComplete(result)
-      } else {
-        setError(result.error || "Failed to process file")
-        onError(result.error || "Failed to process file")
+        // Handle result
+        if (result.success) {
+          onProcessingComplete(result)
+        } else {
+          // Check if it's a connectivity error
+          const isConnError = result.debug?.isConnectivityError || false
+          setIsConnectivityError(isConnError)
+
+          const errorMsg = result.debug?.suggestion || result.error || "Failed to process file"
+          setError(errorMsg)
+          onError(errorMsg)
+        }
+      } catch (err) {
+        clearInterval(progressInterval)
+        throw err
       }
     } catch (err) {
       console.error("Error processing file:", err)
-      setError(err.message || "An unexpected error occurred")
-      onError(err.message || "An unexpected error occurred")
+      setProgress(0)
+
+      // Check if it's a connectivity error
+      const isConnError =
+        err.message?.includes("Failed to fetch") ||
+        err.message?.includes("network") ||
+        err.message?.includes("ECONNREFUSED") ||
+        err.message?.includes("timeout")
+
+      setIsConnectivityError(isConnError)
+
+      const errorMsg = isConnError
+        ? "There seems to be an issue connecting to the Google API. Please check your internet connection and try again later."
+        : err.message || "An unexpected error occurred"
+
+      setError(errorMsg)
+      onError(errorMsg)
     } finally {
-      // Keep progress at 100% for a moment to show completion
-      setTimeout(() => {
+      // Keep progress at 100% for a moment to show completion if successful
+      if (progress > 0) {
+        setTimeout(() => {
+          setIsProcessing(false)
+          setProgress(0)
+        }, 2000)
+      } else {
         setIsProcessing(false)
-        setProgress(0)
-      }, 2000)
+      }
     }
   }
 
@@ -133,9 +165,9 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
           </div>
 
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
+            <Alert variant={isConnectivityError ? "warning" : "destructive"}>
+              {isConnectivityError ? <WifiOff className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
+              <AlertTitle>{isConnectivityError ? "Connection Error" : "Error"}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}

@@ -39,10 +39,11 @@ export function EditableTable({ data, headers, onUpdate }) {
     }
   }, [data, headers])
 
-  const handleCellClick = (row, col) => {
-    if (row < tableData.length && col < tableData[row].length) {
-      setEditCell({ row, col })
-      setEditValue(tableData[row][col] || "")
+  const handleCellClick = (rowIndex, colIndex) => {
+    // Make sure we're within bounds
+    if (rowIndex >= 0 && rowIndex < tableData.length && colIndex >= 0 && colIndex < headers.length) {
+      setEditCell({ row: rowIndex, col: colIndex })
+      setEditValue(tableData[rowIndex][colIndex] || "")
     }
   }
 
@@ -53,7 +54,8 @@ export function EditableTable({ data, headers, onUpdate }) {
   const handleCellBlur = () => {
     if (editCell) {
       const { row, col } = editCell
-      if (row < tableData.length && col < tableData[row].length) {
+      // Make sure we're within bounds
+      if (row >= 0 && row < tableData.length && col >= 0 && col < headers.length) {
         const newData = [...tableData]
         newData[row][col] = editValue
         setTableData(newData)

@@ -11,66 +11,93 @@ export function TableToolbar({ data, headers, onUpdate }) {
   const { toast } = useToast()
 
   const handleAddRow = () => {
-    // Create a new empty row with the same number of columns
-    const newRow = Array(headers.length).fill("")
-    const newData = [...data, newRow]
-    onUpdate(newData)
+    try {
+      // Create a new empty row with the same number of columns
+      const newRow = Array(headers.length).fill("")
+      const newData = [...data, newRow]
+      onUpdate(newData)
+    } catch (error) {
+      console.error("Error adding row:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add a new row",
+        variant: "destructive",
+      })
+    }
   }
 
   const exportToCSV = () => {
-    // Create CSV content
-    const csvContent = [
-      headers.join(","),
-      ...data.map((row) => row.map((cell) => `"${(cell || "").replace(/"/g, '""')}"`).join(",")),
-    ].join("\n")
-
-    // Create a blob and download
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `real-estate-inventory-${Date.now()}.csv`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    // Clean up
-    URL.revokeObjectURL(url)
-
-    toast({
-      title: "Downloaded",
-      description: "CSV file downloaded successfully",
-    })
-  }
-
-  const exportToExcel = () => {
-    // Create Excel-compatible CSV
-    const excelContent =
-      "\uFEFF" +
-      [
+    try {
+      // Create CSV content
+      const csvContent = [
         headers.join(","),
         ...data.map((row) => row.map((cell) => `"${(cell || "").replace(/"/g, '""')}"`).join(",")),
       ].join("\n")
 
-    // Create a blob and download
-    const blob = new Blob([excelContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", `real-estate-inventory-${Date.now()}.xlsx`)
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+      // Create a blob and download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `real-estate-inventory-${Date.now()}.csv`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
-    // Clean up
-    URL.revokeObjectURL(url)
+      // Clean up
+      URL.revokeObjectURL(url)
 
-    toast({
-      title: "Downloaded",
-      description: "Excel file downloaded successfully",
-    })
+      toast({
+        title: "Downloaded",
+        description: "CSV file downloaded successfully",
+      })
+    } catch (error) {
+      console.error("Error exporting to CSV:", error)
+      toast({
+        title: "Export Failed",
+        description: "Failed to export data to CSV",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const exportToExcel = () => {
+    try {
+      // Create Excel-compatible CSV
+      const excelContent =
+        "\uFEFF" +
+        [
+          headers.join(","),
+          ...data.map((row) => row.map((cell) => `"${(cell || "").replace(/"/g, '""')}"`).join(",")),
+        ].join("\n")
+
+      // Create a blob and download
+      const blob = new Blob([excelContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.setAttribute("href", url)
+      link.setAttribute("download", `real-estate-inventory-${Date.now()}.xlsx`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      // Clean up
+      URL.revokeObjectURL(url)
+
+      toast({
+        title: "Downloaded",
+        description: "Excel file downloaded successfully",
+      })
+    } catch (error) {
+      console.error("Error exporting to Excel:", error)
+      toast({
+        title: "Export Failed",
+        description: "Failed to export data to Excel",
+        variant: "destructive",
+      })
+    }
   }
 
   return (

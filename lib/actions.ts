@@ -176,6 +176,10 @@ export async function processFile(formData) {
     return {
       success: false,
       error: error.message || "Failed to process file",
+      debug: {
+        error: error.message || "Unknown error",
+        status: "error",
+      },
     }
   }
 }
