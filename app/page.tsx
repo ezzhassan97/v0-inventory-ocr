@@ -88,7 +88,7 @@ export default function Home() {
         })
       }
     } else {
-      const errorMsg = result.debug?.suggestion || "No data could be extracted from the file"
+      const errorMsg = result.debug?.suggestion || result.error || "No data could be extracted from the file"
       setError(errorMsg)
       setDebugInfo(result.debug || null)
 

@@ -14,7 +14,7 @@ export async function clearExtractedTables() {
   // Completely reset all data
   extractedTables = []
   debugInfo = null
-  isExtracting = true
+  isExtracting = false
   lastUploadTimestamp = Date.now()
 
   // Force revalidation of all paths

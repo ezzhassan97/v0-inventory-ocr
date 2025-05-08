@@ -74,6 +74,7 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       formData.append("file", file)
 
       try {
+        // Use the server action to process the file
         const result = await processFile(formData)
 
         // Complete progress animation
@@ -86,7 +87,7 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
         } else {
           // Determine error type
           let errorType = "general"
-          const errorMsg = result.debug?.suggestion || result.error || "Failed to process file"
+          const errorMsg = result.error || "Failed to process file"
 
           if (result.debug?.isConnectivityError) {
             errorType = "connectivity"

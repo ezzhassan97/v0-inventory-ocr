@@ -2,7 +2,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-// Helper function to safely initialize the Google AI client
+// Initialize Google AI with proper error handling
 function getGoogleAI() {
   const apiKey = process.env.GOOGLE_API_KEY
 
