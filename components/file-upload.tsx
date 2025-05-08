@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Upload, FileText, ImageIcon, Loader2, AlertCircle, Eye, WifiOff } from "lucide-react"
+import { Upload, FileText, ImageIcon, Loader2, AlertCircle, Eye, WifiOff, ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -14,13 +14,13 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
   const [isProcessing, setIsProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
-  const [isConnectivityError, setIsConnectivityError] = useState(false)
+  const [errorType, setErrorType] = useState("general") // "general", "connectivity", "api", "config"
   const [showPreview, setShowPreview] = useState(false)
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0]
     setError(null)
-    setIsConnectivityError(false)
+    setErrorType("general")
 
     if (!selectedFile) return
 
@@ -53,7 +53,7 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       setIsProcessing(true)
       setProgress(0)
       setError(null)
-      setIsConnectivityError(false)
+      setErrorType("general")
 
       // Notify parent component
       onProcessingStart()
@@ -84,11 +84,19 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
         if (result.success) {
           onProcessingComplete(result)
         } else {
-          // Check if it's a connectivity error
-          const isConnError = result.debug?.isConnectivityError || false
-          setIsConnectivityError(isConnError)
-
+          // Determine error type
+          let errorType = "general"
           const errorMsg = result.debug?.suggestion || result.error || "Failed to process file"
+
+          if (result.debug?.isConnectivityError) {
+            errorType = "connectivity"
+          } else if (errorMsg.includes("API key") || errorMsg.includes("permission") || errorMsg.includes("access")) {
+            errorType = "config"
+          } else if (errorMsg.includes("Google AI") || errorMsg.includes("Gemini")) {
+            errorType = "api"
+          }
+
+          setErrorType(errorType)
           setError(errorMsg)
           onError(errorMsg)
         }
@@ -100,19 +108,28 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       console.error("Error processing file:", err)
       setProgress(0)
 
-      // Check if it's a connectivity error
-      const isConnError =
-        err.message?.includes("Failed to fetch") ||
-        err.message?.includes("network") ||
-        err.message?.includes("ECONNREFUSED") ||
-        err.message?.includes("timeout")
+      // Determine error type
+      let errorType = "general"
+      const errorMsg = err.message || "An unexpected error occurred"
 
-      setIsConnectivityError(isConnError)
+      if (
+        errorMsg.includes("Failed to fetch") ||
+        errorMsg.includes("network") ||
+        errorMsg.includes("ECONNREFUSED") ||
+        errorMsg.includes("timeout")
+      ) {
+        errorType = "connectivity"
+      } else if (
+        errorMsg.includes("API key") ||
+        errorMsg.includes("configuration") ||
+        errorMsg.includes("environment")
+      ) {
+        errorType = "config"
+      } else if (errorMsg.includes("Google AI") || errorMsg.includes("Gemini") || errorMsg.includes("quota")) {
+        errorType = "api"
+      }
 
-      const errorMsg = isConnError
-        ? "There seems to be an issue connecting to the Google API. Please check your internet connection and try again later."
-        : err.message || "An unexpected error occurred"
-
+      setErrorType(errorType)
       setError(errorMsg)
       onError(errorMsg)
     } finally {
@@ -125,6 +142,45 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       } else {
         setIsProcessing(false)
       }
+    }
+  }
+
+  const getErrorIcon = () => {
+    switch (errorType) {
+      case "connectivity":
+        return <WifiOff className="h-4 w-4" />
+      case "config":
+        return <ShieldAlert className="h-4 w-4" />
+      case "api":
+        return <AlertCircle className="h-4 w-4" />
+      default:
+        return <AlertCircle className="h-4 w-4" />
+    }
+  }
+
+  const getErrorTitle = () => {
+    switch (errorType) {
+      case "connectivity":
+        return "Connection Error"
+      case "config":
+        return "Configuration Error"
+      case "api":
+        return "API Error"
+      default:
+        return "Error"
+    }
+  }
+
+  const getErrorVariant = () => {
+    switch (errorType) {
+      case "connectivity":
+        return "warning"
+      case "config":
+        return "destructive"
+      case "api":
+        return "destructive"
+      default:
+        return "destructive"
     }
   }
 
@@ -165,10 +221,15 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
           </div>
 
           {error && (
-            <Alert variant={isConnectivityError ? "warning" : "destructive"}>
-              {isConnectivityError ? <WifiOff className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-              <AlertTitle>{isConnectivityError ? "Connection Error" : "Error"}</AlertTitle>
+            <Alert variant={getErrorVariant()}>
+              {getErrorIcon()}
+              <AlertTitle>{getErrorTitle()}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
+              {errorType === "config" && (
+                <div className="mt-2 text-xs">
+                  <p>Make sure the GOOGLE_API_KEY environment variable is set correctly in your deployment settings.</p>
+                </div>
+              )}
             </Alert>
           )}
 

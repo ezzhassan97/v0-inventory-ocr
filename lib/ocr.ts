@@ -2,8 +2,22 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai"
 
-// Initialize Google AI with retry logic
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!)
+// Helper function to safely initialize the Google AI client
+function getGoogleAI() {
+  const apiKey = process.env.GOOGLE_API_KEY
+
+  if (!apiKey) {
+    console.error("GOOGLE_API_KEY environment variable is not set")
+    throw new Error("Google API key is not configured. Please set the GOOGLE_API_KEY environment variable.")
+  }
+
+  try {
+    return new GoogleGenerativeAI(apiKey)
+  } catch (error) {
+    console.error("Failed to initialize Google AI client:", error)
+    throw new Error("Failed to initialize Google AI client. Please check your API key and try again.")
+  }
+}
 
 // Helper function to retry API calls
 async function retryFetch(fn, maxRetries = 3, delay = 1000) {
@@ -30,6 +44,11 @@ async function retryFetch(fn, maxRetries = 3, delay = 1000) {
 
 export async function extractTablesFromImage(file) {
   try {
+    // Validate environment
+    if (!process.env.GOOGLE_API_KEY) {
+      throw new Error("Google API key is not configured. Please set the GOOGLE_API_KEY environment variable.")
+    }
+
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer()
     const base64Data = Buffer.from(arrayBuffer).toString("base64")
@@ -37,10 +56,17 @@ export async function extractTablesFromImage(file) {
     // Log file info for debugging
     console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`)
 
-    // Get Gemini model
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-    })
+    // Get Gemini model with error handling
+    let model
+    try {
+      const genAI = getGoogleAI()
+      model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+      })
+    } catch (error) {
+      console.error("Failed to initialize Gemini model:", error)
+      throw new Error("Failed to initialize AI model. Please check your API configuration.")
+    }
 
     // Create prompt for real estate inventory extraction with text-based output
     const prompt = `You are an expert at accurately extracting tables from PDFs or images without missing any details. Analyze the provided real estate inventory document (PDF or image) and carefully extract ALL tables exactly as presented, preserving all table titles (or names, if available), fields, headers, and rows precisely as they appear in the original document.
@@ -81,21 +107,38 @@ File: ${file.name} (${file.type}, ${file.size} bytes)
 Prompt: ${prompt.substring(0, 200)}...`
 
     // Generate content with the image using retry logic
-    const result = await retryFetch(
-      async () => {
-        return await model.generateContent([
-          prompt,
-          {
-            inlineData: {
-              mimeType: file.type,
-              data: base64Data,
+    let result
+    try {
+      result = await retryFetch(
+        async () => {
+          return await model.generateContent([
+            prompt,
+            {
+              inlineData: {
+                mimeType: file.type,
+                data: base64Data,
+              },
             },
-          },
-        ])
-      },
-      3,
-      2000,
-    )
+          ])
+        },
+        3,
+        2000,
+      )
+    } catch (error) {
+      console.error("Failed to generate content from Gemini API:", error)
+
+      // Check for specific API errors
+      const errorMessage = error.message || "Unknown error"
+      if (errorMessage.includes("API key")) {
+        throw new Error("Invalid or unauthorized Google API key. Please check your API key configuration.")
+      } else if (errorMessage.includes("quota") || errorMessage.includes("rate limit")) {
+        throw new Error("Google API quota exceeded. Please try again later.")
+      } else if (errorMessage.includes("permission") || errorMessage.includes("access")) {
+        throw new Error("Permission denied. Your API key may not have access to the Gemini model.")
+      } else {
+        throw new Error(`Failed to process with Google AI: ${errorMessage}`)
+      }
+    }
 
     const response = await result.response
     const responseText = response.text()

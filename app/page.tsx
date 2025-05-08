@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { FileUpload } from "@/components/file-upload"
 import { EditableTable } from "@/components/editable-table"
 import { TableToolbar } from "@/components/table-toolbar"
 import { ApiDebugPanel } from "@/components/api-debug-panel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp, WifiOff } from "lucide-react"
+import { Loader2, AlertCircle, AlertTriangle, ChevronDown, ChevronUp, WifiOff, ShieldAlert } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
@@ -17,8 +17,30 @@ export default function Home() {
   const [openTableIds, setOpenTableIds] = useState({})
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState(null)
+  const [errorType, setErrorType] = useState("general") // "general", "connectivity", "api", "config"
   const [debugInfo, setDebugInfo] = useState(null)
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(true)
   const { toast } = useToast()
+
+  // Check if API key is configured
+  useEffect(() => {
+    const checkApiConfig = async () => {
+      try {
+        const response = await fetch("/api/check-config")
+        const data = await response.json()
+
+        if (!data.configured) {
+          setApiKeyConfigured(false)
+          setError("Google API key is not configured. Please set the GOOGLE_API_KEY environment variable.")
+          setErrorType("config")
+        }
+      } catch (error) {
+        console.error("Failed to check API configuration:", error)
+      }
+    }
+
+    checkApiConfig()
+  }, [])
 
   const handleProcessingStart = () => {
     // Clear previous data and set processing state
@@ -26,6 +48,7 @@ export default function Home() {
     setOpenTableIds({})
     setIsProcessing(true)
     setError(null)
+    setErrorType("general")
     setDebugInfo(null)
   }
 
@@ -65,12 +88,24 @@ export default function Home() {
         })
       }
     } else {
-      setError(result.debug?.suggestion || "No data could be extracted from the file")
+      const errorMsg = result.debug?.suggestion || "No data could be extracted from the file"
+      setError(errorMsg)
       setDebugInfo(result.debug || null)
+
+      // Determine error type
+      if (result.debug?.isConnectivityError) {
+        setErrorType("connectivity")
+      } else if (errorMsg.includes("API key") || errorMsg.includes("permission") || errorMsg.includes("access")) {
+        setErrorType("config")
+      } else if (errorMsg.includes("Google AI") || errorMsg.includes("Gemini")) {
+        setErrorType("api")
+      } else {
+        setErrorType("general")
+      }
 
       toast({
         title: "Warning",
-        description: result.debug?.suggestion || "No structured data could be extracted",
+        description: errorMsg,
         variant: "destructive",
       })
     }
@@ -79,6 +114,30 @@ export default function Home() {
   const handleError = (errorMessage) => {
     setIsProcessing(false)
     setError(errorMessage)
+
+    // Determine error type
+    if (
+      errorMessage.includes("Failed to fetch") ||
+      errorMessage.includes("network") ||
+      errorMessage.includes("ECONNREFUSED") ||
+      errorMessage.includes("timeout")
+    ) {
+      setErrorType("connectivity")
+    } else if (
+      errorMessage.includes("API key") ||
+      errorMessage.includes("configuration") ||
+      errorMessage.includes("environment")
+    ) {
+      setErrorType("config")
+    } else if (
+      errorMessage.includes("Google AI") ||
+      errorMessage.includes("Gemini") ||
+      errorMessage.includes("quota")
+    ) {
+      setErrorType("api")
+    } else {
+      setErrorType("general")
+    }
 
     toast({
       title: "Error",
@@ -106,8 +165,47 @@ export default function Home() {
     extractedTables[0]?.headers?.length === 1 &&
     extractedTables[0]?.headers[0] === "Content"
 
-  // Check if we have a connectivity error
-  const isConnectivityError = debugInfo?.isConnectivityError
+  // Get error icon based on error type
+  const getErrorIcon = () => {
+    switch (errorType) {
+      case "connectivity":
+        return <WifiOff className="h-4 w-4" />
+      case "config":
+        return <ShieldAlert className="h-4 w-4" />
+      case "api":
+        return <AlertCircle className="h-4 w-4" />
+      default:
+        return <AlertCircle className="h-4 w-4" />
+    }
+  }
+
+  // Get error title based on error type
+  const getErrorTitle = () => {
+    switch (errorType) {
+      case "connectivity":
+        return "Connection Error"
+      case "config":
+        return "Configuration Error"
+      case "api":
+        return "API Error"
+      default:
+        return "Error"
+    }
+  }
+
+  // Get error variant based on error type
+  const getErrorVariant = () => {
+    switch (errorType) {
+      case "connectivity":
+        return "warning"
+      case "config":
+        return "destructive"
+      case "api":
+        return "destructive"
+      default:
+        return "destructive"
+    }
+  }
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -120,6 +218,17 @@ export default function Home() {
 
       <div className="grid gap-8 md:grid-cols-[1fr_300px]">
         <div className="space-y-6">
+          {!apiKeyConfigured && (
+            <Alert variant="destructive">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertTitle>Configuration Error</AlertTitle>
+              <AlertDescription>
+                Google API key is not configured. Please set the GOOGLE_API_KEY environment variable in your deployment
+                settings.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <FileUpload
             onProcessingStart={handleProcessingStart}
             onProcessingComplete={handleProcessingComplete}
@@ -145,10 +254,15 @@ export default function Home() {
           )}
 
           {error && !isProcessing && (
-            <Alert variant={isConnectivityError ? "warning" : "destructive"}>
-              {isConnectivityError ? <WifiOff className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-              <AlertTitle>{isConnectivityError ? "Connection Error" : "Error"}</AlertTitle>
+            <Alert variant={getErrorVariant()}>
+              {getErrorIcon()}
+              <AlertTitle>{getErrorTitle()}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
+              {errorType === "config" && (
+                <div className="mt-2 text-xs">
+                  <p>Make sure the GOOGLE_API_KEY environment variable is set correctly in your deployment settings.</p>
+                </div>
+              )}
             </Alert>
           )}
 
