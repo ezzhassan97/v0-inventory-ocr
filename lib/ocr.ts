@@ -1,6 +1,6 @@
 "use server"
 
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { GoogleGenAI } from "@google/genai"
 
 // Initialize Google AI with proper error handling
 function getGoogleAI() {
@@ -12,7 +12,7 @@ function getGoogleAI() {
   }
 
   try {
-    return new GoogleGenerativeAI(apiKey)
+    return new GoogleGenAI({ apiKey })
   } catch (error) {
     console.error("Failed to initialize Google AI client:", error)
     throw new Error("Failed to initialize Google AI client. Please check your API key and try again.")
@@ -25,6 +25,7 @@ async function retryFetch(fn, maxRetries = 3, delay = 1000) {
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      console.log(`API call attempt ${attempt + 1}/${maxRetries}`)
       return await fn()
     } catch (error) {
       console.error(`Attempt ${attempt + 1} failed:`, error)
@@ -32,6 +33,7 @@ async function retryFetch(fn, maxRetries = 3, delay = 1000) {
 
       // Wait before retrying
       if (attempt < maxRetries - 1) {
+        console.log(`Waiting ${delay}ms before retry...`)
         await new Promise((resolve) => setTimeout(resolve, delay))
         // Increase delay for next attempt (exponential backoff)
         delay *= 2
@@ -56,15 +58,12 @@ export async function extractTablesFromImage(file) {
     // Log file info for debugging
     console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`)
 
-    // Get Gemini model with error handling
-    let model
+    // Get Gemini AI instance
+    let ai
     try {
-      const genAI = getGoogleAI()
-      model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
-      })
+      ai = getGoogleAI()
     } catch (error) {
-      console.error("Failed to initialize Gemini model:", error)
+      console.error("Failed to initialize Gemini AI:", error)
       throw new Error("Failed to initialize AI model. Please check your API configuration.")
     }
 
@@ -101,25 +100,35 @@ CRITICAL INSTRUCTIONS TO FOLLOW STRICTLY:
 11. Make sure to extract ALL tables from the document, even if there are many of them.`
 
     // Store request info
-    const requestInfo = `Request to Gemini 1.5 Flash:
-Model: gemini-1.5-flash
+    const requestInfo = `Request to Gemini:
+Model: gemini-2.0-flash
 File: ${file.name} (${file.type}, ${file.size} bytes)
 Prompt: ${prompt.substring(0, 200)}...`
 
-    // Generate content with the image using retry logic
+    console.log("Sending request to Gemini API")
+
+    // Generate content with the image using retry logic and new API format
     let result
     try {
       result = await retryFetch(
         async () => {
-          return await model.generateContent([
-            prompt,
+          console.log("Calling generateContent with image data")
+
+          // Using the new API format
+          const contents = [
+            { text: prompt },
             {
               inlineData: {
                 mimeType: file.type,
                 data: base64Data,
               },
             },
-          ])
+          ]
+
+          return await ai.models.generateContent({
+            model: "gemini-2.0-flash",
+            contents: contents,
+          })
         },
         3,
         2000,
@@ -140,8 +149,8 @@ Prompt: ${prompt.substring(0, 200)}...`
       }
     }
 
-    const response = await result.response
-    const responseText = response.text()
+    // Extract the text from the response using the new API format
+    const responseText = result.text || ""
 
     console.log("Raw response from Gemini (first 500 chars):", responseText.substring(0, 500) + "...")
 

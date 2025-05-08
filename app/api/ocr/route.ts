@@ -22,20 +22,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    let tables
+    console.log(`Received file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`)
 
-    // Process based on file type
-    if (file.type === "application/pdf") {
-      tables = await extractTablesFromPDF(file)
-    } else if (file.type.startsWith("image/")) {
-      tables = await extractTablesFromImage(file)
-    } else {
-      return NextResponse.json({ error: "Unsupported file type" }, { status: 400 })
+    let result
+    try {
+      // Process based on file type
+      if (file.type === "application/pdf") {
+        console.log("Processing PDF file")
+        result = await extractTablesFromPDF(file)
+      } else if (file.type.startsWith("image/")) {
+        console.log("Processing image file")
+        result = await extractTablesFromImage(file)
+      } else {
+        console.error(`Unsupported file type: ${file.type}`)
+        return NextResponse.json({ error: "Unsupported file type" }, { status: 400 })
+      }
+    } catch (error) {
+      console.error("Error in OCR processing:", error)
+      return NextResponse.json(
+        {
+          error: "Failed to process file",
+          details: error.message || "Unknown error in OCR processing",
+        },
+        { status: 500 },
+      )
     }
 
-    return NextResponse.json({ tables })
+    console.log("OCR processing completed successfully")
+    return NextResponse.json(result)
   } catch (error) {
-    console.error("Error processing file:", error)
+    console.error("Unhandled error in OCR API route:", error)
     return NextResponse.json(
       {
         error: "Failed to process file",

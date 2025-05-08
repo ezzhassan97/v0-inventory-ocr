@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { GoogleGenAI } from "@google/genai"
 
 export async function GET() {
   console.log("Config check API route called")
@@ -20,14 +20,15 @@ export async function GET() {
     // Try to initialize the Google AI client to verify the API key
     try {
       console.log("Testing API key validity")
-      const genAI = new GoogleGenerativeAI(apiKey)
-
-      // Try to get a model to verify the API key works
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+      const ai = new GoogleGenAI({ apiKey })
 
       // Make a simple API call to verify connectivity
-      const result = await model.generateContent("Test")
-      const text = result.response.text()
+      const result = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: [{ text: "Test" }],
+      })
+
+      const text = result.text || ""
 
       console.log("API key is valid and working")
       return NextResponse.json({

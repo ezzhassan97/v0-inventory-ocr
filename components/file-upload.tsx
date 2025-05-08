@@ -74,8 +74,24 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
       formData.append("file", file)
 
       try {
-        // Use the server action to process the file
-        const result = await processFile(formData)
+        // Try server action first
+        let result = await processFile(formData)
+
+        // If server action fails, try API route
+        if (!result || result.error) {
+          console.log("Server action failed, trying API route")
+          const response = await fetch("/api/ocr", {
+            method: "POST",
+            body: formData,
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: "Failed to parse error response" }))
+            throw new Error(errorData.error || `Server error: ${response.status}`)
+          }
+
+          result = await response.json()
+        }
 
         // Complete progress animation
         clearInterval(progressInterval)
@@ -237,7 +253,7 @@ export function FileUpload({ onProcessingStart, onProcessingComplete, onError })
           {progress > 0 && (
             <div className="w-full space-y-2">
               <div className="flex justify-between text-xs text-gray-500">
-                <span>Processing with Gemini 1.5 Flash...</span>
+                <span>Processing with Gemini 2.0 Flash...</span>
                 <span className="font-medium">{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
